@@ -7,11 +7,14 @@ from email.mime.multipart import MIMEMultipart
 SENDER_EMAIL = os.environ.get("MAIL_USERNAME")
 SENDER_PASSWORD = os.environ.get("MAIL_PASSWORD")
 
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465
+# 🔹 Microsoft Outlook / Office 365 전용 SMTP 설정
+SMTP_SERVER = "smtp.office365.com"
+SMTP_PORT = 587
 
 def send_custom_emails():
-    server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+    # Outlook은 STARTTLS(587 포트) 방식을 사용합니다.
+    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+    server.starttls()  # 보안 연결 설정
     server.login(SENDER_EMAIL, SENDER_PASSWORD)
 
     subject_template = ""
