@@ -7,17 +7,17 @@ from email.mime.multipart import MIMEMultipart
 SENDER_EMAIL = os.environ.get("MAIL_USERNAME")
 SENDER_PASSWORD = os.environ.get("MAIL_PASSWORD")
 
-# 🔹 네이버 전용 SMTP 설정 (SSL 465번 포트)
-SMTP_SERVER = "smtp.naver.com"
+# 🔹 Gmail 전용 SMTP 설정 (SSL 465번 포트)
+SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 
 def send_custom_emails():
-    # 네이버 메일은 SSL 방식(465 포트)으로 보안 연결합니다.
+    # Gmail SSL 465 포트 보안 연결
     server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
     
     try:
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        print("✅ 네이버 SMTP 로그인 성공!")
+        print("✅ Gmail SMTP 로그인 성공!")
     except Exception as e:
         print(f"❌ 로그인 실패: {e}")
         raise e
