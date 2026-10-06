@@ -7,15 +7,20 @@ from email.mime.multipart import MIMEMultipart
 SENDER_EMAIL = os.environ.get("MAIL_USERNAME")
 SENDER_PASSWORD = os.environ.get("MAIL_PASSWORD")
 
-# 🔹 Microsoft Outlook / Office 365 전용 SMTP 설정
-SMTP_SERVER = "smtp.office365.com"
-SMTP_PORT = 587
+# 🔹 네이버 전용 SMTP 설정 (SSL 465번 포트)
+SMTP_SERVER = "smtp.naver.com"
+SMTP_PORT = 465
 
 def send_custom_emails():
-    # Outlook은 STARTTLS(587 포트) 방식을 사용합니다.
-    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-    server.starttls()  # 보안 연결 설정
-    server.login(SENDER_EMAIL, SENDER_PASSWORD)
+    # 네이버 메일은 SSL 방식(465 포트)으로 보안 연결합니다.
+    server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+    
+    try:
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        print("✅ 네이버 SMTP 로그인 성공!")
+    except Exception as e:
+        print(f"❌ 로그인 실패: {e}")
+        return
 
     subject_template = ""
     body_template = ""
