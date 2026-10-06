@@ -20,7 +20,7 @@ def send_custom_emails():
         print("✅ 네이버 SMTP 로그인 성공!")
     except Exception as e:
         print(f"❌ 로그인 실패: {e}")
-        return
+        raise e
 
     subject_template = ""
     body_template = ""
