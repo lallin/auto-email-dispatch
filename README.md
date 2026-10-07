@@ -78,6 +78,7 @@ Naver and Daum require turning on SMTP in their mail settings first.
 |---|---|---|
 | `HOST` | `127.0.0.1` | Bind address. `0.0.0.0` = office sharing mode |
 | `ALLOWED_NETWORKS` | localhost + private ranges | Networks allowed to connect (CIDRs, comma-separated) |
+| `ALLOWED_HOSTS` | (none) | Domain names allowed in the `Host` header, comma-separated (e.g. a Cloudflare Tunnel domain). Access by IP address or `localhost` is always allowed; other domains are refused to block DNS rebinding |
 | `PORT` | `5000` | Port |
 | `API_TOKEN` | (none) | Optional. When set, `/api/*` requests require `Authorization: Bearer <token>` |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | (none) | Default sender account when there is no `sender.json` |

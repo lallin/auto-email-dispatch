@@ -41,6 +41,8 @@ ALLOWED_NETWORKS = [
     ).split(",")
     if n.strip()
 ]
+# IP 주소·localhost 외에 접속을 허용할 도메인 (예: Cloudflare Tunnel 주소). 쉼표로 구분
+ALLOWED_HOSTS = {h.strip().lower() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()}
 # 기본 발송 계정 저장 파일 (비밀번호가 들어 있으므로 .gitignore 에 포함)
 SENDER_FILE = os.path.join(BASE_DIR, "sender.json")
 # 발송 결과 기록 파일 폴더 (수신자 주소가 들어 있으므로 .gitignore 에 포함)
@@ -71,6 +73,24 @@ def check_network():
     if ip is None or not any(ip in net for net in ALLOWED_NETWORKS):
         return jsonify(error="허용된 네트워크(사무실 내부망)에서만 접속할 수 있습니다."), 403
     return None
+
+
+@app.before_request
+def check_host():
+    """IP 주소나 localhost 로 접속한 요청만 받는다 (DNS 리바인딩 공격 방지).
+
+    외부 사이트가 자기 도메인을 이 서버 IP 로 바꿔치기해 직원 브라우저로 요청을 보내는 것을 막는다.
+    Cloudflare Tunnel 등 도메인으로 접속해야 하면 ALLOWED_HOSTS 환경변수에 그 도메인을 넣는다.
+    """
+    host = urlsplit("//" + request.host).hostname or ""
+    try:
+        ipaddress.ip_address(host)
+        return None
+    except ValueError:
+        pass
+    if host == "localhost" or host in ALLOWED_HOSTS:
+        return None
+    return jsonify(error="IP 주소로 접속해 주세요. (도메인 접속은 ALLOWED_HOSTS 에 등록해야 합니다)"), 403
 
 
 def is_external():
@@ -242,7 +262,8 @@ def resolve_account():
         raise ValueError(f"잘못된 보내는 주소: {email}")
 
     is_default = bool(default) and email.lower() == default["email"].lower()
-    if not password:
+    use_saved_password = not password
+    if use_saved_password:
         if not is_default:
             raise ValueError(f"{email} 의 비밀번호를 입력하세요.")
         password = default["password"]
@@ -262,6 +283,14 @@ def resolve_account():
         if not smtp:
             domain = email.rsplit("@", 1)[-1]
             raise ValueError(f"{domain} 메일 서버를 자동으로 찾지 못했습니다. SMTP 서버 주소와 포트를 직접 입력하세요.")
+
+    # 저장된 비밀번호는 저장할 때 확인한 그 메일 서버로만 보낸다.
+    # 다른 서버를 입력하면 그 서버가 비밀번호를 가로챌 수 있으므로 비밀번호를 직접 입력해야 한다
+    if use_saved_password:
+        saved_smtp = ((default["smtp_host"], default["smtp_port"]) if default.get("smtp_host")
+                      else smtp_preset(default["email"]))
+        if smtp != saved_smtp:
+            raise ValueError("기본 계정과 다른 메일 서버를 쓰려면 비밀번호를 직접 입력하세요.")
 
     # Google 앱 비밀번호는 'abcd efgh ...' 처럼 띄어 써서 보여주므로 공백을 뺀다
     if smtp[0] == "smtp.gmail.com":
@@ -296,10 +325,16 @@ def write_send_log(sender, subject, results):
             if is_new:
                 writer.writerow(LOG_COLUMNS)
             for r in results:
-                writer.writerow([now.strftime("%Y-%m-%d %H:%M:%S"), sender, r["name"], r["email"],
-                                 render(subject, r["name"]), "성공" if r["ok"] else "실패",
-                                 r.get("error", "")])
+                writer.writerow([csv_safe(v) for v in (
+                    now.strftime("%Y-%m-%d %H:%M:%S"), sender, r["name"], r["email"],
+                    render(subject, r["name"]), "성공" if r["ok"] else "실패", r.get("error", ""))])
     return "logs/" + os.path.basename(path)
+
+
+def csv_safe(value):
+    """엑셀이 = + - @ 로 시작하는 칸을 수식으로 실행하지 않도록 앞에 ' 를 붙인다."""
+    value = str(value)
+    return "'" + value if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
 
 
 @app.get("/")

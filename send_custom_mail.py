@@ -4,6 +4,7 @@ import html
 import io
 import re
 import smtplib
+import ssl
 import sys
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
@@ -46,10 +47,13 @@ def smtp_preset(email):
 
 
 def connect_smtp(host, port):
+    # smtplib 은 기본적으로 서버 인증서를 확인하지 않아, 같은 네트워크의 공격자가 메일 서버인 척
+    # 비밀번호를 가로챌 수 있다. 인증서와 서버 이름을 반드시 확인한다
+    context = ssl.create_default_context()
     if port == 465:
-        return smtplib.SMTP_SSL(host, port, timeout=30)
+        return smtplib.SMTP_SSL(host, port, timeout=30, context=context)
     server = smtplib.SMTP(host, port, timeout=30)
-    server.starttls()
+    server.starttls(context=context)
     return server
 
 CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recipients.csv")
