@@ -22,12 +22,11 @@ GitHub Actions 및 Python `smtplib`를 활용하여 수신자별 맞춤 이메�
 ├── recipients.csv              # 메일 제목, 본문 템플릿 및 수신자 명단
 ├── send_custom_mail.py         # SMTP 연동 및 개인화 메일 발송 파이썬 스크립트
 └── README.md                   # 프로젝트 안내 문서
+```
 
 ---
 
 ## 웹 서버 (사무실 공유용)
-
-
 
 ```bash
 pip install -r requirements.txt
