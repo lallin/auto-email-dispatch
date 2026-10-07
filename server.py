@@ -1,9 +1,12 @@
+import csv
 import hmac
 import ipaddress
 import json
 import os
 import re
 import socket
+import threading
+from datetime import datetime
 from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -40,6 +43,10 @@ ALLOWED_NETWORKS = [
 ]
 # 기본 발송 계정 저장 파일 (비밀번호가 들어 있으므로 .gitignore 에 포함)
 SENDER_FILE = os.path.join(BASE_DIR, "sender.json")
+# 발송 결과 기록 파일 폴더 (수신자 주소가 들어 있으므로 .gitignore 에 포함)
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+LOG_COLUMNS = ["시각", "보낸 계정", "이름", "이메일", "제목", "결과", "오류"]
+_log_lock = threading.Lock()
 
 app = Flask(__name__, static_folder="static")
 # Gmail 첨부 한도(25MB)에 맞춘 요청 크기 제한
@@ -273,6 +280,28 @@ def wants_save_default():
     return request.form.get("save_default") in ("1", "on", "true")
 
 
+def wants_save_log():
+    return request.form.get("save_log") in ("1", "on", "true")
+
+
+def write_send_log(sender, subject, results):
+    """발송 결과를 logs/날짜.csv 에 이어서 적고, 파일 이름을 돌려준다. 엑셀에서 바로 열리도록 UTF-8(BOM)."""
+    now = datetime.now()
+    path = os.path.join(LOG_DIR, now.strftime("%Y-%m-%d") + ".csv")
+    with _log_lock:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        is_new = not os.path.exists(path)
+        with open(path, "a", newline="", encoding="utf-8-sig" if is_new else "utf-8") as f:
+            writer = csv.writer(f)
+            if is_new:
+                writer.writerow(LOG_COLUMNS)
+            for r in results:
+                writer.writerow([now.strftime("%Y-%m-%d %H:%M:%S"), sender, r["name"], r["email"],
+                                 render(subject, r["name"]), "성공" if r["ok"] else "실패",
+                                 r.get("error", "")])
+    return "logs/" + os.path.basename(path)
+
+
 @app.get("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
@@ -349,8 +378,15 @@ def send():
     # 로그인에 성공했으므로, 요청했다면 이 계정을 기본으로 저장한다
     if wants_save_default():
         save_default_sender(account)
+    log_file = None
+    if wants_save_log():
+        try:
+            log_file = write_send_log(account["email"], subject, results)
+        except OSError as e:
+            log_file = f"(기록 파일 저장 실패: {e})"
     return jsonify(
         sender=account["email"],
+        log_file=log_file,
         saved_default=wants_save_default(),
         sent=sum(r["ok"] for r in results),
         failed=sum(not r["ok"] for r in results),

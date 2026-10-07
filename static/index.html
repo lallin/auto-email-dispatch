@@ -116,6 +116,7 @@
       <input id="token" type="password" autocomplete="off">
     </section>
 
+    <label class="check" style="margin:0 0 8px"><input type="checkbox" id="save_log" name="save_log" value="1"> 발송 결과를 기록 파일로 저장 <span class="hint" style="margin:0">(서버 컴퓨터의 logs 폴더에 날짜별 CSV 로 저장, 엑셀로 열 수 있음)</span></label>
     <div class="row">
       <button type="button" id="preview">미리보기</button>
       <button type="submit" id="send" class="primary">발송</button>
@@ -129,6 +130,9 @@
 const $ = (id) => document.getElementById(id);
 try { $("token").value = localStorage.getItem("token") || ""; } catch {}
 if ($("token").value) $("token-box").hidden = false;
+// 기록 파일 저장 체크 여부는 이 브라우저에 기억한다
+try { $("save_log").checked = localStorage.getItem("save_log") === "1"; } catch {}
+$("save_log").addEventListener("change", () => { try { localStorage.setItem("save_log", $("save_log").checked ? "1" : "0"); } catch {} });
 $("token").addEventListener("change", () => { try { localStorage.setItem("token", $("token").value); } catch {} loadConfig(); });
 
 let presets = {};
@@ -301,7 +305,8 @@ $("form").onsubmit = async (ev) => {
     const r = await api("POST", "/api/send", formData());
     if (r.saved_default) { $("mail_password").value = ""; loadConfig(); }
     const lines = r.results.map((x) => `${x.ok ? "✅" : "❌"} ${x.name} <${x.email}>${x.error ? " - " + x.error : ""}`);
-    log(`보낸 계정: ${r.sender}${r.saved_default ? " (기본 계정으로 저장됨)" : ""}\n성공 ${r.sent}건 / 실패 ${r.failed}건\n\n` + lines.join("\n"), r.failed ? "err" : "ok");
+    const logLine = r.log_file ? `\n기록 파일: ${r.log_file}` : "";
+    log(`보낸 계정: ${r.sender}${r.saved_default ? " (기본 계정으로 저장됨)" : ""}${logLine}\n성공 ${r.sent}건 / 실패 ${r.failed}건\n\n` + lines.join("\n"), r.failed ? "err" : "ok");
   } catch (e) { log("발송 실패: " + e.message, "err"); }
   finally { $("send").disabled = false; }
 };
