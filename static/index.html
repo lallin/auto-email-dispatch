@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메일 일괄 발송</title>
+<style>
+  :root { --bg:#f7f7f8; --card:#fff; --text:#1d1d1f; --muted:#6b6b70; --line:#e2e2e6; --accent:#2f6fed; --ok:#1a7f37; --err:#c62828; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16161a; --card:#202026; --text:#ececf1; --muted:#9a9aa3; --line:#33333b; --accent:#6b9bff; --ok:#4cc26a; --err:#ff6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-weight:600; margin:12px 0 4px; }
+  section > label:first-child { margin-top: 0; }
+  input, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); font:inherit; }
+  textarea { min-height: 120px; resize: vertical; }
+  #body { min-height: 180px; }
+  .hint { color:var(--muted); font-size:13px; margin-top:4px; }
+  button { padding:8px 14px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.6; cursor:default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  #log { white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size:13px; overflow-wrap:anywhere; }
+  .ok { color:var(--ok); } .err { color:var(--err); }
+  .preview { border-top:1px solid var(--line); padding:8px 0; }
+  .preview:first-child { border-top:0; padding-top:0; }
+  fieldset { border:0; margin:0; padding:0; min-width:0; }
+  label.check { display:flex; align-items:center; gap:6px; font-weight:400; }
+  label.check input { width:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>메일 일괄 발송</h1>
+
+  <form id="form">
+    <section>
+      <label>보내는 계정</label>
+      <div id="default-box" hidden>
+        <div>기본 발송 계정: <strong id="default-email"></strong> <span class="hint" id="default-smtp"></span></div>
+        <div class="row" style="margin-top:8px"><button type="button" id="use-other">다른 계정으로 보내기</button></div>
+      </div>
+
+      <fieldset id="account-editor" disabled hidden>
+        <label for="mail_username">보내는 메일 주소</label>
+        <input id="mail_username" name="mail_username" type="email" autocomplete="username" placeholder="you@company.com / you@naver.com">
+        <div class="hint" id="smtp-status"></div>
+
+        <div id="smtp-custom" hidden>
+          <div class="row">
+            <div style="flex:3;min-width:180px">
+              <label for="smtp_host">SMTP 서버</label>
+              <input id="smtp_host" name="smtp_host" placeholder="smtp.example.com">
+            </div>
+            <div style="flex:1;min-width:90px">
+              <label for="smtp_port">포트</label>
+              <input id="smtp_port" name="smtp_port" inputmode="numeric" placeholder="465">
+            </div>
+          </div>
+          <div class="hint">465 는 SSL, 587 은 STARTTLS 로 연결합니다. 회사/학교 메일은 관리자에게 서버 주소를 확인하세요.</div>
+        </div>
+
+        <label for="mail_password">비밀번호</label>
+        <input id="mail_password" name="mail_password" type="password" autocomplete="current-password">
+        <div class="hint" id="provider-tip"></div>
+
+        <label class="check"><input type="checkbox" id="save_default" name="save_default" value="1"> 이 계정을 기본 발송 계정으로 저장</label>
+        <div class="row" style="margin-top:8px">
+          <button type="button" id="save-default-now">기본 계정으로 저장</button>
+          <button type="button" id="back-to-default">기본 계정으로 보내기</button>
+        </div>
+        <div class="hint">메일을 보내지 않고 이 계정만 기본 발송 계정으로 저장합니다. 저장 전에 로그인이 되는지(비밀번호가 맞는지) 확인합니다.</div>
+      </fieldset>
+    </section>
+
+    <section>
+      <label for="recipients">수신자</label>
+      <textarea id="recipients" name="recipients" placeholder="홍길동,hong@example.com&#10;kim@example.com"></textarea>
+      <div class="hint">한 줄에 <code>이름,이메일</code> 또는 <code>이메일</code>만 입력하세요.</div>
+
+      <label for="recipients_file">수신자 파일 (CSV)</label>
+      <input id="recipients_file" name="recipients_file" type="file" accept=".csv,text/csv">
+      <div class="hint">엑셀에서 A열에 이름, B열에 이메일을 적고 CSV 로 저장하세요. 첫 줄 제목(이름,이메일)과 다른 열은 있어도 됩니다. 위 목록에 더해집니다.</div>
+    </section>
+
+    <section>
+      <label for="subject">제목</label>
+      <input id="subject" name="subject">
+      <label for="body">본문</label>
+      <textarea id="body" name="body"></textarea>
+      <div class="row" style="margin-top:6px"><button type="button" id="add-link">링크 넣기</button></div>
+      <div class="hint"><code>{name}</code> 은 수신자 이름으로 바뀝니다.<br>
+      링크: 본문에서 링크를 걸 글자를 드래그로 선택하고 <b>링크 넣기</b>를 누른 뒤 주소를 입력하세요. 본문에 <code>{link:보일 글자|https://주소}</code> 가 들어가고, 받는 사람에게는 그 글자가 눌리는 링크로 보입니다. 본문에 그냥 적은 <code>https://</code> 주소도 링크가 됩니다.</div>
+
+      <label for="images">본문 이미지</label>
+      <input id="images" name="images" type="file" accept=".png,.jpg,.jpeg,.gif,.webp" multiple>
+      <div class="row" style="margin-top:6px; align-items:center">
+        <label for="image-width" class="check">너비 <input id="image-width" placeholder="원본" style="width:90px"></label>
+        <span class="hint" style="margin:0">예: <code>300</code> (픽셀) 또는 <code>50%</code></span>
+      </div>
+      <div id="image-buttons" class="row" style="margin-top:6px"></div>
+      <div class="hint">이미지를 고른 뒤, 본문에서 넣을 위치에 커서를 두고 아래 이미지 이름 버튼을 누르세요. 본문에 <code>{image:파일명}</code> 이 들어가고, 그 자리에 이미지가 보이게 발송됩니다. 여러 장을 고를 수 있고, 같은 이미지를 여러 번 넣어도 됩니다.<br>
+      크기는 위 너비 칸에 적고 버튼을 누르거나, 본문에서 직접 <code>{image:파일명|300}</code> (300픽셀), <code>{image:파일명|50%}</code> (본문 폭의 절반) 처럼 고치면 됩니다. 비워 두면 원본 크기(화면보다 크면 화면에 맞춤)입니다.</div>
+
+      <label for="attachments">첨부파일</label>
+      <input id="attachments" name="attachments" type="file" multiple>
+      <div class="hint">모든 수신자에게 같은 파일이 첨부됩니다 (합계 25MB 이하).</div>
+    </section>
+
+    <section id="token-box" hidden>
+      <label for="token">접속 비밀번호 <span class="hint">(사무실 밖에서 접속할 때 필요합니다. 한 번 입력하면 이 브라우저에 기억됩니다)</span></label>
+      <input id="token" type="password" autocomplete="off">
+    </section>
+
+    <div class="row">
+      <button type="button" id="preview">미리보기</button>
+      <button type="submit" id="send" class="primary">발송</button>
+    </div>
+  </form>
+
+  <section style="margin-top:16px"><div id="log" class="hint">준비됨</div></section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+try { $("token").value = localStorage.getItem("token") || ""; } catch {}
+if ($("token").value) $("token-box").hidden = false;
+$("token").addEventListener("change", () => { try { localStorage.setItem("token", $("token").value); } catch {} loadConfig(); });
+
+let presets = {};
+const TIPS = {
+  "smtp.gmail.com": '일반 비밀번호가 아니라 <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">앱 비밀번호</a>(16자리)를 입력하세요.',
+  "smtp.naver.com": "네이버 메일 → 환경설정 → POP3/IMAP 설정에서 SMTP 사용을 켜야 합니다. 2단계 인증을 쓰면 애플리케이션 비밀번호를 입력하세요.",
+  "smtp.daum.net": "다음 메일 → 환경설정 → IMAP/SMTP 에서 사용을 켜야 합니다. 2단계 인증을 쓰면 앱 비밀번호를 입력하세요.",
+  "smtp.kakao.com": "카카오 메일 → 환경설정 → IMAP/SMTP 에서 사용을 켜야 합니다.",
+  "smtp.office365.com": "Outlook/Hotmail 개인 계정은 마이크로소프트 정책상 비밀번호 로그인이 막혀 있을 수 있습니다.",
+  "smtp.mail.me.com": "iCloud 는 appleid.apple.com 에서 만든 앱 암호를 입력하세요.",
+  "smtp.mail.yahoo.com": "Yahoo 계정 보안 설정에서 만든 앱 비밀번호를 입력하세요.",
+};
+
+// 보내는 주소의 도메인으로 SMTP 서버를 고르고, 모르는 도메인이면 직접 입력칸을 연다
+function updateSmtp() {
+  const email = $("mail_username").value.trim();
+  const domain = email.includes("@") ? email.split("@").pop().toLowerCase() : "";
+  const preset = presets[domain];
+  const manual = $("smtp-custom").dataset.manual === "1";
+  $("smtp-custom").hidden = !manual && (!domain || !!preset);
+  $("provider-tip").innerHTML = "";
+
+  if (manual) {
+    $("smtp-status").innerHTML = 'SMTP 서버를 직접 입력합니다. <a href="#" id="smtp-auto">자동 선택으로 돌아가기</a>';
+  } else if (preset) {
+    $("smtp-status").innerHTML = `메일 서버: <code>${preset[0]}:${preset[1]}</code> (자동) · <a href="#" id="smtp-manual">직접 입력</a>`;
+    $("provider-tip").innerHTML = TIPS[preset[0]] || "";
+  } else if (domain) {
+    $("smtp-status").textContent = `${domain} 메일 서버는 자동으로 찾을 수 없어 직접 입력해야 합니다.`;
+  } else {
+    $("smtp-status").textContent = "주소를 입력하면 메일 서버를 자동으로 고릅니다.";
+  }
+  if (!manual && preset) { $("smtp_host").value = ""; $("smtp_port").value = ""; }
+
+  const toManual = $("smtp-manual"), toAuto = $("smtp-auto");
+  if (toManual) toManual.onclick = (e) => {
+    e.preventDefault();
+    $("smtp-custom").dataset.manual = "1";
+    if (preset) { $("smtp_host").value = preset[0]; $("smtp_port").value = preset[1]; }
+    updateSmtp();
+  };
+  if (toAuto) toAuto.onclick = (e) => { e.preventDefault(); $("smtp-custom").dataset.manual = ""; updateSmtp(); };
+}
+$("mail_username").addEventListener("input", updateSmtp);
+
+let defaultSender = null;
+
+// 기본 계정이 있으면 요약만 보여주고, 입력칸은 꺼둔다 (꺼진 입력칸은 전송되지 않아 서버가 기본 계정을 씀)
+function showAccount(editing) {
+  $("default-box").hidden = !defaultSender || editing;
+  $("account-editor").hidden = !!defaultSender && !editing;
+  $("account-editor").disabled = !!defaultSender && !editing;
+  $("back-to-default").hidden = !defaultSender;
+  if (defaultSender) {
+    $("default-email").textContent = defaultSender.email;
+    $("default-smtp").textContent = defaultSender.smtp_host ? `(${defaultSender.smtp_host}:${defaultSender.smtp_port})` : "";
+  } else {
+    $("save_default").checked = true;
+  }
+  updateSmtp();
+}
+
+async function loadConfig() {
+  try {
+    const c = await api("GET", "/api/config");
+    presets = c.smtp_presets || {};
+    defaultSender = c.default_sender;
+  } catch (e) { log("설정 불러오기 실패: " + e.message, "err"); }
+  showAccount(false);
+}
+
+$("use-other").onclick = () => {
+  $("mail_username").value = ""; $("mail_password").value = "";
+  $("save_default").checked = false;
+  showAccount(true);
+  $("mail_username").focus();
+};
+$("back-to-default").onclick = () => showAccount(false);
+
+$("save-default-now").onclick = async () => {
+  const fd = new FormData();
+  ["mail_username", "mail_password", "smtp_host", "smtp_port"].forEach((k) => fd.append(k, $(k).value));
+  log("메일 서버에 로그인해 비밀번호를 확인하는 중...");
+  try {
+    const r = await api("POST", "/api/default-sender", fd);
+    log(`기본 발송 계정을 ${r.email} 로 저장했습니다.`, "ok");
+    $("mail_password").value = "";
+    await loadConfig();
+  } catch (e) { log(e.message, "err"); }
+};
+
+loadConfig();
+
+function authHeaders() {
+  return $("token").value ? { Authorization: "Bearer " + $("token").value } : {};
+}
+
+async function api(method, path, body) {
+  const res = await fetch(path, { method, headers: authHeaders(), body });
+  const json = await res.json().catch(() => ({}));
+  // 서버가 토큰을 요구할 때만 토큰 입력칸을 보여준다
+  if (res.status === 401) $("token-box").hidden = false;
+  if (!res.ok) throw new Error(json.error || res.statusText);
+  return json;
+}
+
+function formData() {
+  const fd = new FormData($("form"));
+  return fd;
+}
+
+// 고른 본문 이미지마다 버튼을 만들고, 누르면 본문 커서 위치에 {image:파일명} 을 넣는다
+$("images").addEventListener("change", () => {
+  $("image-buttons").replaceChildren(...[...$("images").files].map((f) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = "+ " + f.name;
+    b.onclick = () => {
+      const width = $("image-width").value.replace(/\s/g, "");
+      const t = $("body"), tag = `{image:${f.name}${width ? "|" + width : ""}}`;
+      t.setRangeText(tag, t.selectionStart, t.selectionEnd, "end");
+      t.focus();
+    };
+    return b;
+  }));
+});
+
+// 본문에서 선택한 글자를 {link:글자|주소} 로 감싼다
+$("add-link").onclick = () => {
+  const t = $("body"), start = t.selectionStart, end = t.selectionEnd;
+  const selected = t.value.slice(start, end).replace(/[{}|\r\n]/g, " ").trim();
+  const text = selected || prompt("링크로 보일 글자를 입력하세요")?.replace(/[{}|\r\n]/g, " ").trim();
+  if (!text) return;
+  let url = prompt(`"${text}" 에 연결할 주소를 입력하세요`, "https://")?.trim();
+  if (!url || url === "https://") return;
+  url = url.replace(/\s/g, "%20").replace(/\|/g, "%7C").replace(/\{/g, "%7B").replace(/\}/g, "%7D");
+  if (!/^(https?:\/\/|mailto:)/i.test(url)) url = (url.includes("@") ? "mailto:" : "https://") + url;
+  t.setRangeText(`{link:${text}|${url}}`, start, end, "end");
+  t.focus();
+};
+
+function log(text, cls = "") { $("log").className = cls; $("log").textContent = text; }
+
+$("preview").onclick = async () => {
+  try {
+    const r = await api("POST", "/api/preview", formData());
+    $("log").className = "";
+    $("log").innerHTML = "";
+    const files = (r.attachments.length ? `\n첨부: ${r.attachments.join(", ")}` : "")
+      + (r.images.length ? `\n본문 이미지: ${r.images.join(", ")}` : "");
+    r.messages.forEach((m) => {
+      const div = document.createElement("div");
+      div.className = "preview";
+      div.textContent = `To: ${m.name} <${m.email}>\n제목: ${m.subject}${files}\n\n${m.body}`;
+      $("log").appendChild(div);
+    });
+  } catch (e) { log("미리보기 실패: " + e.message, "err"); }
+};
+
+$("form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  let count;
+  try { count = (await api("POST", "/api/preview", formData())).messages.length; }
+  catch (e) { log("발송 실패: " + e.message, "err"); return; }
+  if (!confirm(`${count}명에게 메일을 발송할까요?`)) return;
+
+  $("send").disabled = true;
+  log("발송 중...");
+  try {
+    const r = await api("POST", "/api/send", formData());
+    if (r.saved_default) { $("mail_password").value = ""; loadConfig(); }
+    const lines = r.results.map((x) => `${x.ok ? "✅" : "❌"} ${x.name} <${x.email}>${x.error ? " - " + x.error : ""}`);
+    log(`보낸 계정: ${r.sender}${r.saved_default ? " (기본 계정으로 저장됨)" : ""}\n성공 ${r.sent}건 / 실패 ${r.failed}건\n\n` + lines.join("\n"), r.failed ? "err" : "ok");
+  } catch (e) { log("발송 실패: " + e.message, "err"); }
+  finally { $("send").disabled = false; }
+};
+</script>
+</body>
+</html>

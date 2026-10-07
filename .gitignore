@@ -1,0 +1,4 @@
+__pycache__/
+sender.json
+.playwright-mcp/
+api_token.txt
